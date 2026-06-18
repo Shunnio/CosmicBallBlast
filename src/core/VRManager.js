@@ -9,7 +9,7 @@ export class VRManager {
         this.gameManager = gameManager;
         this.camera = camera;
         this.controls = controls;
-        this.dolly = dolly; // Thêm biến Dolly
+        this.dolly = dolly; 
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
         this.mouseHeldBall = null;
@@ -126,7 +126,6 @@ export class VRManager {
                         obj.userData.physicsBody.type = CANNON.Body.KINEMATIC;
                         controller.attach(obj);
                         
-                        // FIX LỖI: Cầm bi sát tay cầm
                         obj.position.set(0, 0, 0); 
                         
                         this.gameManager.currentHeldBall = obj;
@@ -164,9 +163,10 @@ export class VRManager {
             }
         };
 
+        // ĐÃ CHỈNH SỬA: Chiều dài tia laser giảm xuống 15m
         const geometry = new THREE.BufferGeometry().setFromPoints([
             new THREE.Vector3(0, 0, 0),
-            new THREE.Vector3(0, 0, -5) 
+            new THREE.Vector3(0, 0, -15) 
         ]);
 
         [0, 1].forEach(i => {
@@ -174,7 +174,6 @@ export class VRManager {
             c.addEventListener('selectstart', grab);
             c.addEventListener('selectend', release);
             
-            // Gắn sự kiện Squeeze (Nút Grip - ngón giữa) để Tạm Dừng Game
             c.addEventListener('squeezestart', () => {
                 this.gameManager.togglePause();
             });
@@ -184,7 +183,6 @@ export class VRManager {
             c.userData.laser = laserLine;
             c.add(laserLine); 
             
-            // Gắn Controller vào Dolly thay vì Scene
             if (this.dolly) this.dolly.add(c);
             else this.scene.add(c);
         });
@@ -198,15 +196,13 @@ export class VRManager {
     }
 
     update() {
-        // --- THÊM LOGIC DI CHUYỂN & ÂM LƯỢNG (LOCOMOTION) ---
         const session = this.renderer.xr.getSession();
         if (session && this.gameManager.isPlaying && !this.gameManager.isPaused) {
             for (const source of session.inputSources) {
                 if (source.gamepad && source.gamepad.axes.length >= 4) {
-                    // Joystick tay TRÁI để di chuyển người
                     if (source.handedness === 'left') {
-                        const xAxis = source.gamepad.axes[2]; // Trái/Phải
-                        const zAxis = source.gamepad.axes[3]; // Tiến/Lùi
+                        const xAxis = source.gamepad.axes[2]; 
+                        const zAxis = source.gamepad.axes[3]; 
                         const speed = 0.05;
 
                         const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
@@ -218,17 +214,16 @@ export class VRManager {
                         if (Math.abs(xAxis) > 0.1 && this.dolly) this.dolly.position.addScaledVector(right, xAxis * speed);
                     }
                     
-                    // Joystick tay PHẢI để tăng giảm âm lượng
                     if (source.handedness === 'right') {
                         const zAxis = source.gamepad.axes[3]; 
                         if (!this.volDelay) {
-                            if (zAxis < -0.5) { // Gạt lên: Tăng âm
+                            if (zAxis < -0.5) { 
                                 let v = this.gameManager.audioListener.getMasterVolume();
                                 let newV = Math.min(1.0, v + 0.1);
                                 this.gameManager.audioListener.setMasterVolume(newV);
                                 this.gameManager.update3DUI(`ÂM LƯỢNG: ${Math.round(newV * 100)}%`);
                                 this.volDelay = true; setTimeout(() => this.volDelay = false, 300);
-                            } else if (zAxis > 0.5) { // Gạt xuống: Giảm âm
+                            } else if (zAxis > 0.5) { 
                                 let v = this.gameManager.audioListener.getMasterVolume();
                                 let newV = Math.max(0.0, v - 0.1);
                                 this.gameManager.audioListener.setMasterVolume(newV);
@@ -265,7 +260,8 @@ export class VRManager {
             const body = star.userData.physicsBody;
             if (!body) return;
 
-            if (star.position.length() > 35 || star.position.y < -10) {
+            // ĐÃ CHỈNH SỬA: Giới hạn rớt xuống mức Y < -6
+            if (star.position.length() > 35 || star.position.y < -6) {
                 const startX = (Math.random() - 0.5) * 4;
                 const startY = 1.0 + Math.random() * 1.5;
                 const startZ = 0.5 + Math.random() * 1.5;
