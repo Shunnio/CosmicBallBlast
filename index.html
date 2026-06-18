@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic Ball Blast</title>
+    
+    <link rel="icon" href="data:,">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap" rel="stylesheet">
+    
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+        "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+      }
+    }
+    </script>
+
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #020205; font-family: 'Montserrat', sans-serif; }
+        
+        #menu-overlay, #game-over-overlay, #victory-overlay, #level-transition {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: rgba(0, 10, 25, 0.9); z-index: 100; color: white; text-align: center;
+        }
+
+        #level-transition { background: rgba(0, 0, 0, 0.95); z-index: 200; }
+        .spinner { border: 8px solid rgba(0, 212, 255, 0.3); border-top: 8px solid #00d4ff; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; margin-bottom: 20px;}
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .title-text { font-family: 'Montserrat', sans-serif; font-size: 45px; margin-bottom: 20px; letter-spacing: 4px; text-transform: uppercase; text-shadow: 0 0 20px #00d4ff; }
+        .record-text { font-family: 'Montserrat', sans-serif; color: #ffd700; font-weight: bold; margin-top: 15px; font-size: 22px; }
+        
+        button {
+            font-family: 'Montserrat', sans-serif;
+            padding: 15px 40px; margin: 10px; font-size: 18px; cursor: pointer;
+            background: linear-gradient(45deg, #00d4ff, #00ffcc); border: none; 
+            border-radius: 8px; color: #000; font-weight: 900; transition: 0.3s;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        button:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(0, 212, 255, 0.6); }
+        .hidden { display: none !important; }
+
+        #audio-control {
+            position: absolute; bottom: 20px; right: 20px; z-index: 20; color: #00d4ff; 
+            background: rgba(0, 20, 50, 0.8); padding: 15px; border-radius: 8px; 
+            border: 1px solid #00d4ff; display: flex; flex-direction: column; gap: 12px; font-weight: bold;
+        }
+        .audio-row { display: flex; justify-content: space-between; width: 220px; align-items: center; font-size: 14px;}
+
+        #hud-container {
+            position: absolute; top: 20px; left: 20px; z-index: 20;
+            background: rgba(0, 20, 40, 0.85); border: 2px solid #00ffcc; border-radius: 10px;
+            padding: 20px 40px; color: #fff; pointer-events: none;
+            box-shadow: 0 0 20px rgba(0, 255, 204, 0.3); text-align: center;
+            transform: scale(0.66); transform-origin: top left;
+        }
+        .label { color: #00ffcc; font-weight: bold; text-transform: uppercase; font-size: 16px; letter-spacing: 2px;}
+        #ball-color-name { font-weight: 900; font-size: 32px; text-transform: uppercase; letter-spacing: 2px; margin-top: 10px;}
+
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 6px; height: 6px; background-color: rgba(255, 255, 255, 0.5);
+            border-radius: 50%; z-index: 10; pointer-events: none; box-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
+        }
+
+        #toast-notification {
+            position: absolute; top: 150px; left: 50%; transform: translateX(-50%);
+            background: linear-gradient(90deg, transparent, rgba(255, 215, 0, 0.8), transparent);
+            color: #fff; font-size: 24px; font-weight: bold; padding: 10px 50px;
+            text-transform: uppercase; letter-spacing: 3px; z-index: 50;
+            opacity: 0; transition: opacity 0.5s; pointer-events: none; text-shadow: 0 0 10px #ff9900;
+        }
+        .show-toast { opacity: 1 !important; }
+    </style>
+</head>
+<body>
+    <div id="crosshair"></div>
+    <div id="toast-notification">...</div>
+
+    <div id="level-transition" class="hidden">
+        <div class="spinner"></div>
+        <h1 class="title-text" style="font-size: 30px;">ĐANG VƯỢT KHÔNG GIAN...</h1>
+    </div>
+
+    <div id="hud-container">
+        <span class="label">TRẠNG THÁI TAY CẦM</span>
+        <div id="ball-color-name">KHÔNG CẦM BI</div>
+    </div>
+
+    <div id="menu-overlay">
+        <h1 class="title-text">COSMIC BALL BLAST</h1>
+        <button onclick="startGame('normal')">CHẾ ĐỘ THƯỜNG</button>
+        <button onclick="startGame('hard')">CHẾ ĐỘ KHÓ</button>
+    </div>
+
+    <div id="game-over-overlay" class="hidden">
+        <h1 class="title-text" style="color: #ff3333; text-shadow: 0 0 20px #ff3333;">GAME OVER</h1>
+        <p id="final-stats" class="record-text"></p>
+        <button onclick="location.reload()">CHƠI LẠI</button>
+    </div>
+
+    <div id="victory-overlay" class="hidden">
+        <h1 class="title-text" style="color: #00ffcc; text-shadow: 0 0 20px #00ffcc;">NHIỆM VỤ HOÀN THÀNH</h1>
+        <p id="victory-stats" class="record-text"></p>
+        <button onclick="location.reload()">MENU CHÍNH</button>
+    </div>
+
+    <div id="audio-control">
+        <div class="audio-row">
+            <label for="bgm-slider">NHẠC NỀN</label>
+            <input type="range" id="bgm-slider" min="0" max="1" step="0.05" value="0.15" style="cursor: pointer;">
+        </div>
+        <div class="audio-row">
+            <label for="sfx-slider">HIỆU ỨNG</label>
+            <input type="range" id="sfx-slider" min="0" max="1" step="0.05" value="0.5" style="cursor: pointer;">
+        </div>
+    </div>
+
+    <div id="vr-btn-container" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 20;"></div>
+
+    <script type="module" src="./index.js"></script>
+    <script>
+        window.startGame = (mode) => {
+            document.getElementById('menu-overlay').classList.add('hidden');
+            if(window.gameInstance) window.gameInstance.initGame(mode);
+        };
+        window.showToast = (msg) => {
+            const toast = document.getElementById('toast-notification');
+            toast.innerText = msg;
+            toast.classList.add('show-toast');
+            setTimeout(() => toast.classList.remove('show-toast'), 3000);
+        };
+    </script>
+</body>
+</html>
