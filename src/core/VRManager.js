@@ -48,7 +48,20 @@ export class VRManager {
     }
 
     setupPC() {
+        // Phím tắt P hoặc Escape để Pause game khi đang test trên PC
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
+                this.gameManager.togglePause();
+            }
+        });
+
         window.addEventListener('mousedown', () => {
+            // NẾU ĐANG PAUSE TRÊN PC -> KHÁCH CLICK CHUỘT SẼ OUT GAME
+            if (this.gameManager.isPaused) {
+                this.gameManager.exitToMenu();
+                return;
+            }
+
             if (!this.gameManager.isPlaying) return;
             this.raycaster.setFromCamera(this.mouse, this.camera);
             
@@ -104,9 +117,24 @@ export class VRManager {
 
     setupVR() {
         const grab = (e) => {
-            if (!this.gameManager.isPlaying) return;
             const controller = e.target;
-            
+
+            // XỬ LÝ SỰ KIỆN 1: NẾU ĐANG PAUSE -> BẤM NÚT TRIGGER ĐỂ THOÁT GAME RA MENU CHỌN MÀN
+            if (this.gameManager.isPaused) {
+                this.gameManager.exitToMenu();
+                return;
+            }
+
+            // XỬ LÝ SỰ KIỆN 2: NẾU GAME CHƯA CHƠI (Ở MENU) -> BẤM TRIGGER ĐỂ CHỌN LEVEL TRONG VR
+            if (!this.gameManager.isPlaying) {
+                if (controller.userData.handedness === 'left') {
+                    this.gameManager.initGame('normal');
+                } else if (controller.userData.handedness === 'right') {
+                    this.gameManager.initGame('hard');
+                }
+                return;
+            }
+
             const targets = [
                 ...this.gameManager.stars.filter(s => !s.userData.isSnapped),
                 ...this.gameManager.backgroundPlanets
@@ -163,7 +191,6 @@ export class VRManager {
             }
         };
 
-        // ĐÃ CHỈNH SỬA: Chiều dài tia laser giảm xuống 15m
         const geometry = new THREE.BufferGeometry().setFromPoints([
             new THREE.Vector3(0, 0, 0),
             new THREE.Vector3(0, 0, -15) 
@@ -171,6 +198,12 @@ export class VRManager {
 
         [0, 1].forEach(i => {
             const c = this.renderer.xr.getController(i);
+            
+            // LẮNG NGHE ĐỂ GÁN BÊN TAY (LEFT/RIGHT) CHO CONTROLLER KHI KẾT NỐI
+            c.addEventListener('connected', (event) => {
+                c.userData.handedness = event.data.handedness;
+            });
+
             c.addEventListener('selectstart', grab);
             c.addEventListener('selectend', release);
             
@@ -260,7 +293,6 @@ export class VRManager {
             const body = star.userData.physicsBody;
             if (!body) return;
 
-            // ĐÃ CHỈNH SỬA: Giới hạn rớt xuống mức Y < -6
             if (star.position.length() > 35 || star.position.y < -6) {
                 const startX = (Math.random() - 0.5) * 4;
                 const startY = 1.0 + Math.random() * 1.5;

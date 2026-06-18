@@ -28,7 +28,7 @@ export class GameManager {
         this.score = 0;
         this.totalTimeUsed = 0;
         this.isPlaying = false;
-        this.isPaused = false; // Thêm trạng thái Pause
+        this.isPaused = false; 
         this.timerInterval = null;
         this.starInterval = null;
         
@@ -80,7 +80,58 @@ export class GameManager {
         });
 
         this.setup3DUI();
+        this.setupVRHUD(); 
         window.gameInstance = this;
+    }
+
+    setupVRHUD() {
+        this.vrHudCanvas = document.createElement('canvas');
+        this.vrHudCanvas.width = 512;
+        this.vrHudCanvas.height = 256;
+        this.vrHudCtx = this.vrHudCanvas.getContext('2d');
+        this.vrHudTexture = new THREE.CanvasTexture(this.vrHudCanvas);
+
+        const hudMat = new THREE.MeshBasicMaterial({ 
+            map: this.vrHudTexture, 
+            transparent: true, 
+            depthTest: false 
+        });
+        
+        this.vrHudMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.2), hudMat);
+        this.vrHudMesh.position.set(-0.5, 0.0, -0.8); 
+        this.vrHudMesh.renderOrder = 999; 
+
+        if (this.audioListener && this.audioListener.parent) {
+            this.audioListener.parent.add(this.vrHudMesh);
+        }
+
+        this.updateVRHUD("KHÔNG CẦM BI", "#ffffff");
+        this.lastVrText = "KHÔNG CẦM BI";
+    }
+
+    updateVRHUD(text, hexStr) {
+        const ctx = this.vrHudCtx;
+        ctx.clearRect(0, 0, 512, 256);
+        
+        ctx.fillStyle = 'rgba(0, 20, 40, 0.85)';
+        ctx.fillRect(0, 0, 512, 256);
+        ctx.strokeStyle = '#00ffcc';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(0, 0, 512, 256);
+
+        ctx.fillStyle = '#00ffcc';
+        ctx.font = 'bold 35px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('TRẠNG THÁI TAY CẦM', 256, 80);
+
+        ctx.fillStyle = hexStr;
+        ctx.font = 'bold 50px Arial';
+        ctx.shadowColor = hexStr;
+        ctx.shadowBlur = 15;
+        ctx.fillText(text, 256, 170);
+        ctx.shadowBlur = 0; 
+
+        this.vrHudTexture.needsUpdate = true;
     }
 
     setup3DUI() {
@@ -105,6 +156,25 @@ export class GameManager {
         this.uiCtx.strokeStyle = '#00d4ff';
         this.uiCtx.lineWidth = 15;
         this.uiCtx.strokeRect(0, 0, 1024, 512);
+
+        // THIẾT KẾ LẠI GIAO DIỆN PAUSE ĐỂ THÊM CHỨC NĂNG OUT GAME
+        if (this.isPaused) {
+            this.uiCtx.fillStyle = '#ff3333';
+            this.uiCtx.font = 'bold 75px Arial, sans-serif';
+            this.uiCtx.fillText("GAME ĐÃ TẠM DỪNG", 60, 120);
+
+            this.uiCtx.fillStyle = '#ffffff';
+            this.uiCtx.font = 'bold 42px Arial, sans-serif';
+            this.uiCtx.fillText("• Bóp nút GRIP một lần nữa để TIẾP TỤC CHƠI", 60, 230);
+            this.uiCtx.fillText("• BẤM NÚT TRIGGER ĐỂ THOÁT GAME (OUT GAME)", 60, 310);
+            
+            this.uiCtx.fillStyle = '#00ffcc';
+            this.uiCtx.font = 'bold 38px Arial, sans-serif';
+            this.uiCtx.fillText("Sau khi thoát, hệ thống sẽ đưa bạn về Menu chọn chế độ.", 60, 430);
+            
+            this.uiTexture.needsUpdate = true;
+            return;
+        }
 
         const currentLevelZones = this.snapZones.filter(z => z.userData.level === this.currentLevelIdx);
         const totalRequired = currentLevelZones.length;
@@ -142,12 +212,11 @@ export class GameManager {
         this.uiTexture.needsUpdate = true;
     }
 
-    // THÊM: Tính năng Tạm dừng
     togglePause() {
         if (!this.isPlaying) return;
         this.isPaused = !this.isPaused;
         if (this.isPaused) {
-            this.update3DUI("ĐÃ TẠM DỪNG GAME");
+            this.update3DUI();
             const camera = this.audioListener.parent;
             if(camera) {
                 this.uiPanel.position.copy(camera.position);
@@ -158,7 +227,65 @@ export class GameManager {
         } else {
             this.update3DUI();
             this.uiPanel.position.set(0, 3.5, -4.5); 
+            this.uiPanel.rotation.set(0, 0, 0);
         }
+    }
+
+    // CHỨC NĂNG MỚI: DỌN DẸP MÀN CHƠI CŨ VÀ QUAY VỀ MENU 3D
+    exitToMenu() {
+        this.isPlaying = false;
+        this.isPaused = false;
+        if (this.timerInterval) clearInterval(this.timerInterval);
+        if (this.starInterval) clearInterval(this.starInterval);
+        
+        while(this.wheelGroup.children.length) this.wheelGroup.remove(this.wheelGroup.children[0]);
+        this.stars.forEach(s => { this.scene.remove(s); if(s.userData.physicsBody) this.physicsWorld.removeBody(s.userData.physicsBody); });
+        this.stars = [];
+        this.easterEggs.forEach(egg => { this.scene.remove(egg.mesh); this.physicsWorld.removeBody(egg.body); });
+        this.easterEggs = [];
+
+        // Mở lại menu HTML trên PC
+        const menuOverlay = document.getElementById('menu-overlay');
+        if (menuOverlay) menuOverlay.classList.remove('hidden');
+        const gOverlay = document.getElementById('game-over-overlay');
+        if (gOverlay) gOverlay.classList.add('hidden');
+        const vOverlay = document.getElementById('victory-overlay');
+        if (vOverlay) vOverlay.classList.add('hidden');
+
+        // Hiển thị giao diện menu chọn chế độ 3D cho VR
+        this.show3DMenu();
+    }
+
+    show3DMenu() {
+        const ctx = this.uiCtx;
+        ctx.clearRect(0, 0, 1024, 512);
+        ctx.fillStyle = 'rgba(0, 10, 30, 0.95)';
+        ctx.fillRect(0, 0, 1024, 512);
+        ctx.strokeStyle = '#00d4ff';
+        ctx.lineWidth = 15;
+        ctx.strokeRect(0, 0, 1024, 512);
+
+        ctx.fillStyle = '#00d4ff';
+        ctx.font = 'bold 75px Arial';
+        ctx.fillText('COSMIC BALL BLAST', 60, 120);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 45px Arial';
+        ctx.fillText('CHỌN CHẾ ĐỘ CHƠI TRONG VR:', 60, 240);
+
+        ctx.fillStyle = '#00ffcc';
+        ctx.font = 'bold 40px Arial';
+        ctx.fillText('• BẤM TRIGGER TAY TRÁI: CHẾ ĐỘ THƯỜNG', 60, 340);
+
+        ctx.fillStyle = '#ff9900';
+        ctx.font = 'bold 40px Arial';
+        ctx.fillText('• BẤM TRIGGER TAY PHẢI: CHẾ ĐỘ KHÓ', 60, 420);
+
+        this.uiTexture.needsUpdate = true;
+
+        // Đặt bảng UI ngay tầm mắt trước mặt người chơi để chọn màn
+        this.uiPanel.position.set(0, 1.45, -2.5);
+        this.uiPanel.rotation.set(0, 0, 0);
     }
 
     initGame(mode) {
@@ -173,6 +300,7 @@ export class GameManager {
         this.bombSpawnTimer = 0;
         this.basicColorRespawnTimer = 0;
         this.uiPanel.position.set(0, 3.5, -4.5); 
+        this.uiPanel.rotation.set(0, 0, 0);
 
         if (this.countdownSound && this.countdownSound.isPlaying) this.countdownSound.stop();
 
@@ -198,7 +326,7 @@ export class GameManager {
         this.timeLeft = (this.gameMode === 'normal') ? 999 : (55 - (this.currentLevelIdx * 3));
         
         this.timerInterval = setInterval(() => {
-            if (!this.isPlaying || this.isPaused) return; // Không đếm lùi khi pause
+            if (!this.isPlaying || this.isPaused) return; 
             this.totalTimeUsed++; 
             if (this.gameMode !== 'normal') {
                 this.timeLeft--;
@@ -598,7 +726,6 @@ export class GameManager {
                 }
             });
 
-            // Nếu trên web có transition HTML, ta vẫn giữ
             const transitionScreen = document.getElementById('level-transition');
             if (transitionScreen) transitionScreen.classList.remove('hidden');
 
@@ -639,7 +766,7 @@ export class GameManager {
     }
 
     update(dt) {
-        if (this.isPaused) return; // Dừng logic tính toán khi Pause
+        if (this.isPaused) return; 
 
         if (this.audioListener && this.audioListener.parent && this.uiPanel) {
             const camera = this.audioListener.parent;
@@ -667,6 +794,11 @@ export class GameManager {
                 hudColor.style.textShadow = `0 0 15px ${hexStr}`;
             }
 
+            if (this.vrHudMesh && this.lastVrText !== nameDisplay) {
+                this.updateVRHUD(nameDisplay.toUpperCase(), hexStr);
+                this.lastVrText = nameDisplay;
+            }
+
             this.snapZones.forEach(z => {
                 if (z.userData.isFilled) return;
                 const dist = ballPos.distanceTo(z.getWorldPosition(new THREE.Vector3()));
@@ -680,6 +812,11 @@ export class GameManager {
                 hudColor.style.color = `#fff`; 
                 hudColor.style.textShadow = 'none';
             }
+            if (this.vrHudMesh && this.lastVrText !== "KHÔNG CẦM BI") {
+                this.updateVRHUD("KHÔNG CẦM BI", "#ffffff");
+                this.lastVrText = "KHÔNG CẦM BI";
+            }
+
             this.snapZones.forEach(z => { if(z.userData.glowMesh) { z.userData.glowMesh.scale.setScalar(1.0); z.userData.glowMesh.material.opacity = 0.6; } });
         }
 
@@ -734,8 +871,8 @@ export class GameManager {
             const orbitSpeed = dt * 0.0075; 
             const dx = p.position.x;
             const dz = p.position.z + 10.0;
-            p.position.x = dx * Math.cos(orbitSpeed) - dz * Math.sin(orbitSpeed);
-            p.position.z = dx * Math.sin(orbitSpeed) + dz * Math.cos(orbitSpeed) - 10.0;
+            p.position.x = Math.cos(orbitSpeed) * dx - Math.sin(orbitSpeed) * dz;
+            p.position.z = Math.sin(orbitSpeed) * dx + Math.cos(orbitSpeed) * dz - 10.0;
         });
 
         if (this.gameMode === 'hard') {
@@ -833,10 +970,6 @@ export class GameManager {
                                 
                                 this.score += egg.mesh.userData.points;
                                 this.update3DUI();
-                                
-                                if (window.showToast) {
-                                    window.showToast(`🔥 PHÁ TINH THỂ BÍ MẬT! +${egg.mesh.userData.points} ĐIỂM 🔥`);
-                                }
                             }
                         }
                     });
@@ -878,7 +1011,6 @@ export class GameManager {
         if (this.countdownSound && this.countdownSound.isPlaying) this.countdownSound.stop();
         if (this.victorySound.buffer) this.victorySound.play();
         
-        // HIỂN THỊ TRÊN THẺ 3D VR
         this.update3DUI(`THẮNG! Điểm: ${this.score} | T.Gian: ${this.totalTimeUsed}s`); 
         const camera = this.audioListener.parent;
         if(camera) {
@@ -888,7 +1020,6 @@ export class GameManager {
             this.uiPanel.lookAt(camera.position);
         }
 
-        // Tương thích HTML fallback
         const vOverlay = document.getElementById('victory-overlay');
         const vStats = document.getElementById('victory-stats');
         if (vOverlay) vOverlay.classList.remove('hidden');
@@ -900,7 +1031,6 @@ export class GameManager {
         if (this.countdownSound && this.countdownSound.isPlaying) this.countdownSound.stop();
         if (this.gameOverSound.buffer) this.gameOverSound.play();
         
-        // HIỂN THỊ TRÊN THẺ 3D VR
         this.update3DUI(`GAME OVER! Điểm: ${this.score}`); 
         const camera = this.audioListener.parent;
         if(camera) {
@@ -910,7 +1040,6 @@ export class GameManager {
             this.uiPanel.lookAt(camera.position);
         }
 
-        // Tương thích HTML fallback
         const gOverlay = document.getElementById('game-over-overlay');
         const gStats = document.getElementById('final-stats');
         if (gOverlay) gOverlay.classList.remove('hidden');
