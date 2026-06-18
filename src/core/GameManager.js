@@ -97,8 +97,9 @@ export class GameManager {
             depthTest: false 
         });
         
-        this.vrHudMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.2), hudMat);
-        this.vrHudMesh.position.set(-0.5, 0.0, -0.8); 
+        this.vrHudMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.3), hudMat);
+        
+        this.vrHudMesh.position.set(-0.8, -0.2, -1.5); 
         this.vrHudMesh.renderOrder = 999; 
 
         if (this.audioListener && this.audioListener.parent) {
@@ -140,10 +141,18 @@ export class GameManager {
         this.uiCanvas.height = 512;
         this.uiCtx = this.uiCanvas.getContext('2d');
         this.uiTexture = new THREE.CanvasTexture(this.uiCanvas);
+        
         const uiPanel = new THREE.Mesh(
             new THREE.PlaneGeometry(3.0, 1.5),
-            new THREE.MeshBasicMaterial({ map: this.uiTexture, transparent: true, side: THREE.DoubleSide })
+            new THREE.MeshBasicMaterial({ 
+                map: this.uiTexture, 
+                transparent: true, 
+                side: THREE.DoubleSide,
+                depthTest: false // FIX: Ép bảng luôn đè lên vật thể khác
+            })
         );
+        uiPanel.renderOrder = 998; // Đảm bảo độ ưu tiên vẽ cao hơn môi trường game
+        
         uiPanel.position.set(0, 3.5, -4.5); 
         this.uiPanel = uiPanel; 
         this.scene.add(uiPanel);
@@ -157,20 +166,20 @@ export class GameManager {
         this.uiCtx.lineWidth = 15;
         this.uiCtx.strokeRect(0, 0, 1024, 512);
 
-        // THIẾT KẾ LẠI GIAO DIỆN PAUSE ĐỂ THÊM CHỨC NĂNG OUT GAME
+        // FIX: Rút gọn văn bản để tránh bị tràn và che mất nội dung
         if (this.isPaused) {
             this.uiCtx.fillStyle = '#ff3333';
-            this.uiCtx.font = 'bold 75px Arial, sans-serif';
+            this.uiCtx.font = 'bold 65px Arial, sans-serif';
             this.uiCtx.fillText("GAME ĐÃ TẠM DỪNG", 60, 120);
 
             this.uiCtx.fillStyle = '#ffffff';
-            this.uiCtx.font = 'bold 42px Arial, sans-serif';
-            this.uiCtx.fillText("• Bóp nút GRIP một lần nữa để TIẾP TỤC CHƠI", 60, 230);
-            this.uiCtx.fillText("• BẤM NÚT TRIGGER ĐỂ THOÁT GAME (OUT GAME)", 60, 310);
+            this.uiCtx.font = 'bold 40px Arial, sans-serif';
+            this.uiCtx.fillText("• Bóp nút GRIP: TIẾP TỤC CHƠI", 60, 240);
+            this.uiCtx.fillText("• Bấm TRIGGER: THOÁT RA MENU", 60, 330);
             
             this.uiCtx.fillStyle = '#00ffcc';
-            this.uiCtx.font = 'bold 38px Arial, sans-serif';
-            this.uiCtx.fillText("Sau khi thoát, hệ thống sẽ đưa bạn về Menu chọn chế độ.", 60, 430);
+            this.uiCtx.font = 'bold 32px Arial, sans-serif';
+            this.uiCtx.fillText("* Lưu ý: Bạn sẽ mất tiến trình màn này nếu thoát ra.", 60, 440);
             
             this.uiTexture.needsUpdate = true;
             return;
@@ -220,7 +229,8 @@ export class GameManager {
             const camera = this.audioListener.parent;
             if(camera) {
                 this.uiPanel.position.copy(camera.position);
-                const forward = new THREE.Vector3(0, 0, -2).applyQuaternion(camera.quaternion);
+                // FIX: Kéo bảng lại gần 1.5 mét thay vì 2.0 mét
+                const forward = new THREE.Vector3(0, 0, -1.5).applyQuaternion(camera.quaternion);
                 this.uiPanel.position.add(forward);
                 this.uiPanel.lookAt(camera.position);
             }
@@ -231,7 +241,6 @@ export class GameManager {
         }
     }
 
-    // CHỨC NĂNG MỚI: DỌN DẸP MÀN CHƠI CŨ VÀ QUAY VỀ MENU 3D
     exitToMenu() {
         this.isPlaying = false;
         this.isPaused = false;
@@ -244,7 +253,6 @@ export class GameManager {
         this.easterEggs.forEach(egg => { this.scene.remove(egg.mesh); this.physicsWorld.removeBody(egg.body); });
         this.easterEggs = [];
 
-        // Mở lại menu HTML trên PC
         const menuOverlay = document.getElementById('menu-overlay');
         if (menuOverlay) menuOverlay.classList.remove('hidden');
         const gOverlay = document.getElementById('game-over-overlay');
@@ -252,7 +260,6 @@ export class GameManager {
         const vOverlay = document.getElementById('victory-overlay');
         if (vOverlay) vOverlay.classList.add('hidden');
 
-        // Hiển thị giao diện menu chọn chế độ 3D cho VR
         this.show3DMenu();
     }
 
@@ -283,7 +290,6 @@ export class GameManager {
 
         this.uiTexture.needsUpdate = true;
 
-        // Đặt bảng UI ngay tầm mắt trước mặt người chơi để chọn màn
         this.uiPanel.position.set(0, 1.45, -2.5);
         this.uiPanel.rotation.set(0, 0, 0);
     }
